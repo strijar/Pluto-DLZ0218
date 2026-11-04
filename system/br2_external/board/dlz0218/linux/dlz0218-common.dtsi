@@ -1,0 +1,56 @@
+#include <dt-bindings/gpio/gpio.h>
+#include "zynq-7000.dtsi"
+
+/ {
+    model = "DLZ0218 Zynq-7020 AD9363 CMOS";
+    compatible = "xlnx,zynq-7000";
+
+    aliases {
+        serial0 = &uart1;
+        ethernet0 = &gem0;
+        mmc0 = &sdhci0;
+    };
+
+    chosen {
+        stdout-path = "serial0:115200n8";
+    };
+
+    memory@0 {
+        device_type = "memory";
+        reg = <0x0 0x40000000>;
+    };
+};
+
+&clkc {
+    ps-clk-frequency = <33333333>;
+};
+
+&uart1 {
+    status = "okay";
+};
+
+&sdhci0 {
+    status = "okay";
+    bus-width = <4>;
+    disable-wp;
+    max-frequency = <50000000>;
+};
+
+&gem0 {
+    status = "okay";
+    phy-mode = "rgmii-id";
+    phy-handle = <&ethernet_phy>;
+    #address-cells = <1>;
+    #size-cells = <0>;
+
+    /* Address 0 and rgmii-id match the tested U-Boot configuration.
+     * PHY reset is wired to PS_PRO_B; there is no reset GPIO.
+     */
+    ethernet_phy: ethernet-phy@0 {
+        reg = <0>;
+    };
+};
+
+/* USB and QSPI are left disabled.
+ * Add their board-specific nodes when testing those peripherals.
+ */

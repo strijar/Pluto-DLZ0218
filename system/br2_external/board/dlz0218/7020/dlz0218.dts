@@ -1,0 +1,4 @@
+/dts-v1/;
+
+#include "dlz0218-common.dtsi"
+#include "dlz0218-radio.dtsi"

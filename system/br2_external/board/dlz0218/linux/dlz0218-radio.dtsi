@@ -1,0 +1,121 @@
+/* ADI FMCOMMS2 register map; DLZ0218 CMOS wiring and PS GPIO mapping. */
+
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+    fpga_axi: fpga-axi {
+        compatible = "simple-bus";
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges;
+        interrupt-parent = <&intc>;
+
+	rx_dma: dma@7c400000 {
+		compatible = "adi,axi-dmac-1.00.a";
+		reg = <0x7c400000 0x1000>;
+		#dma-cells = <1>;
+		interrupts = <0 57 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&clkc 15>;
+
+		adi,channels {
+			#size-cells = <0>;
+			#address-cells = <1>;
+
+			dma-channel@0 {
+				reg = <0>;
+				adi,source-bus-width = <64>;
+				adi,source-bus-type = <2>;
+				adi,destination-bus-width = <64>;
+				adi,destination-bus-type = <0>;
+			};
+		};
+	};
+
+	tx_dma: dma@7c420000 {
+		compatible = "adi,axi-dmac-1.00.a";
+		reg = <0x7c420000 0x1000>;
+		#dma-cells = <1>;
+		interrupts = <0 56 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&clkc 15>;
+
+		adi,channels {
+			#size-cells = <0>;
+			#address-cells = <1>;
+
+			dma-channel@0 {
+				reg = <0>;
+				adi,source-bus-width = <64>;
+				adi,source-bus-type = <0>;
+				adi,destination-bus-width = <64>;
+				adi,destination-bus-type = <2>;
+			};
+		};
+	};
+
+	cf_ad9361_adc_core_0: cf-ad9361-lpc@79020000 {
+		compatible = "adi,axi-ad9361-6.00.a";
+		reg = <0x79020000 0x6000>;
+		dmas = <&rx_dma 0>;
+		dma-names = "rx";
+
+		spibus-connected = <&adc0_ad9361>;
+	};
+
+	cf_ad9361_dac_core_0: cf-ad9361-dds-core-lpc@79024000 {
+		compatible = "adi,axi-ad9361-dds-6.00.a";
+		reg = <0x79024000 0x1000>;
+		clocks = <&adc0_ad9361 13>;
+		clock-names = "sampl_clk";
+		dmas = <&tx_dma 0>;
+		dma-names = "tx";
+	};
+};
+
+};
+
+/* Keep AXI (100 MHz) and IDELAY reference (200 MHz) running. */
+
+&clkc { fclk-enable = <3>; };
+&spi0 { status = "okay"; };
+
+#define fmc_spi spi0
+#include "adi-ad9361-defaults.dtsi"
+#undef fmc_spi
+
+&adc0_ad9361 {
+    /* AD9363, 40 MHz oscillator, 12-bit CMOS DDR on P0=TX, P1=RX. */
+    compatible = "adi,ad9363a";
+    /delete-property/ adi,lvds-mode-enable;
+    /delete-property/ adi,lvds-bias-mV;
+    /delete-property/ adi,lvds-rx-onchip-termination-enable;
+    adi,full-port-enable;
+    adi,swap-ports-enable;
+    adi,xo-disable-use-ext-refclk-enable;
+    adi,digital-interface-tune-fir-disable;
+    adi,tx-fb-clock-delay = <0>;
+    adi,tx-data-delay = <9>;
+    adi,rf-rx-bandwidth-hz = <18000000>;
+    adi,rf-tx-bandwidth-hz = <18000000>;
+    // This ADI driver writes raw reset levels (0 then 1).
+    reset-gpios = <&gpio0 54 GPIO_ACTIVE_HIGH>;
+    en_agc-gpios = <&gpio0 55 GPIO_ACTIVE_HIGH>;
+    enable-gpios = <&gpio0 56 GPIO_ACTIVE_HIGH>;
+    txnrx-gpios = <&gpio0 57 GPIO_ACTIVE_HIGH>;
+};
+
+/* First-channel antenna switches: receive position at boot. */
+&gpio0 {
+    radio-rx-switch {
+        gpio-hog;
+        gpios = <58 GPIO_ACTIVE_HIGH>;
+        output-high;
+        line-name = "radio-sw-rx";
+    };
+
+    radio-tx-switch {
+        gpio-hog;
+        gpios = <59 GPIO_ACTIVE_HIGH>;
+        output-low;
+        line-name = "radio-sw-tx";
+    };
+};

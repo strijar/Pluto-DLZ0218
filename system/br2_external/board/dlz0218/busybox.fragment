@@ -1,0 +1,2 @@
+# Bound diagnostic captures without adding GNU coreutils.
+CONFIG_TIMEOUT=y
