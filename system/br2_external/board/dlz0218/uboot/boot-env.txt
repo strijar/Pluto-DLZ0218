@@ -43,3 +43,4 @@ vendor=xilinx
 autoload=no
 fpga_addr_r=0x04000000
 fpga_load=load ${devtype} ${devnum}:${distro_bootpart} ${fpga_addr_r} system.bit && fpga loadb 0 ${fpga_addr_r} ${filesize}
+ethaddr=02:70:20:00:02:32
