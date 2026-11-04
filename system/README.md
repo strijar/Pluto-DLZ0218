@@ -174,3 +174,35 @@ wc -c rx.bin
 868/869 МГц и циклический IQ-тон 868,5 МГц через TX DMA.
 Дополнительные 10 дБ ослабления TX дали снижение принятого уровня на 10,18 дБ.
 Длительная непрерывная передача без потерь пока не проверена.
+
+## HDMI framebuffer
+
+Конфигурация включает `vdma_fb.patch`, `CONFIG_FB_VDMA=y` и утилиту
+`hdmi-test`. Узел `r1cbu,vdmafb` по адресу `0x43000000` единолично управляет
+VDMA MM2S. Не добавлять второй узел `xlnx,axi-vdma` для этого же устройства.
+Linux предоставляет `/dev/fb0`, 800×600, 24 bpp, stride 2400 байт, байты B,G,R.
+Pixel clock и тайминги формируются в PL; смены режима из Linux нет.
+Звук пока не включён.
+
+Для существующего дерева Buildroot, в котором Linux уже прошёл стадию
+patch, новый патч автоматически не применится. Пересоздать только дерево
+Linux, затем собрать систему (команды из корня репозитория):
+
+```sh
+env -u LD_LIBRARY_PATH make -C system/buildroot-2024.02 \
+  BR2_EXTERNAL=../br2_external O=../output_system dlz0218_defconfig
+env -u LD_LIBRARY_PATH make -C system/output_system linux-dirclean
+# Сначала выполнить FPGA-сборку; обновить init согласно разделу выше.
+env -u LD_LIBRARY_PATH make -C system/output_system
+```
+
+Если каталог ccache пользователя недоступен, передать
+`CCACHE_DIR=/tmp/dlz0218-ccache` в окружении сборки. После обновления PS7 init
+выполнить `uboot-rebuild`. На SD нужны согласованные `boot.bin`, `u-boot.img`,
+`system.bit`, `uImage`, `dlz0218.dtb` и rootfs из текущей сборки.
+
+После загрузки проверить сообщения `VDMA Framebuffer Probed`, наличие
+`/dev/fb0`, затем выполнить `hdmi-test`. Программа использует ioctl и mmap
+framebuffer и рисует полосы с однопиксельной рамкой. Последовательно проверить
+красную/синюю полосы, все края экрана, SDR RX/TX одновременно с обновлениями
+framebuffer. Аппаратная проверка нового видеотракта ещё требуется.

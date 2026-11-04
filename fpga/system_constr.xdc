@@ -48,3 +48,10 @@ set_property -dict {PACKAGE_PIN U14 IOSTANDARD LVCMOS18} [get_ports {ctrl_in[3]}
 # 2R2T CMOS DDR: interface clock is twice the sample rate, up to 61.44 MHz.
 create_clock -name radio_rx_clk -period 16.276 [get_ports rx_clk_in]
 set_clock_groups -asynchronous -group [get_clocks radio_rx_clk] -group [get_clocks -include_generated_clocks -of_objects [get_pins system_i/sys_ps7/FCLK_CLK0]] -group [get_clocks -include_generated_clocks -of_objects [get_pins system_i/sys_ps7/FCLK_CLK1]]
+
+set_property -dict {PACKAGE_PIN A20 IOSTANDARD LVCMOS18} [get_ports HDMI_OUT_EN1]
+set_property -dict {PACKAGE_PIN K17 IOSTANDARD DIFF_HSTL_II_18 SLEW FAST} [get_ports TMDS_Clk_p]
+set_property -dict {PACKAGE_PIN F19 IOSTANDARD DIFF_HSTL_II_18 SLEW FAST} [get_ports {TMDS_Data_p[2]}]
+set_property -dict {PACKAGE_PIN K19 IOSTANDARD DIFF_HSTL_II_18 SLEW FAST} [get_ports {TMDS_Data_p[1]}]
+set_property -dict {PACKAGE_PIN L16 IOSTANDARD DIFF_HSTL_II_18 SLEW FAST} [get_ports {TMDS_Data_p[0]}]
+set_property IOSTANDARD DIFF_HSTL_II_18 [get_ports {TMDS_Clk_n TMDS_Data_n[*]}]

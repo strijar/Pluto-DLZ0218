@@ -26,10 +26,9 @@ diff -Naur linux-custom.orig/drivers/video/fbdev/Makefile linux-custom/drivers/v
  obj-$(CONFIG_FB_SH_MOBILE_LCDC)	  += sh_mobile_lcdcfb.o
  obj-y				  += omap/
  obj-y                             += omap2/
-diff -Naur linux-custom.orig/drivers/video/fbdev/vdmafb.c linux-custom/drivers/video/fbdev/vdmafb.c
---- linux-custom.orig/drivers/video/fbdev/vdmafb.c	1970-01-01 03:00:00.000000000 +0300
-+++ linux-custom/drivers/video/fbdev/vdmafb.c	2024-04-15 20:25:07.410153799 +0300
-@@ -0,0 +1,509 @@
+--- linux-custom.orig/drivers/video/fbdev/vdmafb.c
++++ linux-custom/drivers/video/fbdev/vdmafb.c
+@@ -0,0 +1,503 @@
 +/**
 + * @file vdmafb.c
 + * @author Belousov Oleg <belousov.oleg@gmail.com>
@@ -69,6 +68,7 @@ diff -Naur linux-custom.orig/drivers/video/fbdev/vdmafb.c linux-custom/drivers/v
 +#include <linux/io.h>
 +#include <linux/slab.h>
 +#include <linux/delay.h>
++#include <linux/iopoll.h>
 +
 +/* VDMA */
 +
@@ -153,7 +153,7 @@ diff -Naur linux-custom.orig/drivers/video/fbdev/vdmafb.c linux-custom/drivers/v
 +};
 +
 +struct vdma_frame {
-+    u32     phys;
++    dma_addr_t phys;
 +    void*   virt;
 +};
 +
@@ -174,7 +174,7 @@ diff -Naur linux-custom.orig/drivers/video/fbdev/vdmafb.c linux-custom/drivers/v
 +    /*w,    h,    hfsz, hss,  hse,  vfsz, vss,  vse */
 +    { 640,  480,  800,  656,  752,  525,  489,  491 },
 +    { 800,  480,  1056, 840,  968,  525,  489,  491 },
-+    { 800,  600,  1056, 840,  968,  628,  600,  604 },
++    { 800,  600,  1056, 840,  968,  628,  601,  605 },
 +    { 1280, 720,  1650, 1390, 1430, 750,  724,  729 },
 +    { 1280, 1024, 1688, 1328, 1440, 1066, 1024, 1027 },
 +    { 1920, 1080, 2200, 2008, 2052, 1125, 1083, 1088 },
@@ -217,13 +217,7 @@ diff -Naur linux-custom.orig/drivers/video/fbdev/vdmafb.c linux-custom/drivers/v
 +    iowrite32(value, fbdev->reg_vdma + offset + VDMA_REG_TX);
 +}
 +
-+static u32 vdma_rx_read_reg(struct vdma_fb_device* fbdev, u32 offset) {
-+    return ioread32(fbdev->reg_vdma + offset + VDMA_REG_RX);
-+}
 +
-+static void vdma_rx_write_reg(struct vdma_fb_device* fbdev, u32 offset, u32 value) {
-+    iowrite32(value, fbdev->reg_vdma + offset + VDMA_REG_RX);
-+}
 +
 +/**
 + * Set the framebuffer hardware blank state.
@@ -256,8 +250,16 @@ diff -Naur linux-custom.orig/drivers/video/fbdev/vdmafb.c linux-custom/drivers/v
 + * Framebuffer operations.
 + */
 +
++static int vdma_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
++{
++    struct vdma_fb_device *fbdev = container_of(info, struct vdma_fb_device, info);
++    return dma_mmap_coherent(fbdev->dev, vma, fbdev->frame[0].virt,
++                             fbdev->frame[0].phys, info->fix.smem_len);
++}
++
 +static struct fb_ops vdma_fb_ops = {
 +    .owner          = THIS_MODULE,
++    .fb_mmap        = vdma_fb_mmap,
 +    .fb_blank       = vdma_fb_blank,      /* set blank state */
 +    .fb_setcolreg   = vdma_fb_setcolreg,  /* set pseudo color palette */
 +    .fb_fillrect    = cfb_fillrect,         /* fill rectangle area (use default function in the kernel) */
@@ -312,18 +314,11 @@ diff -Naur linux-custom.orig/drivers/video/fbdev/vdmafb.c linux-custom/drivers/v
 +
 +#define GET_FB_SIZE(fbdev) PAGE_ALIGN((fbdev)->width * (fbdev)->height * BYTES_PER_PIXEL)
 +
-+/* Release register resource. */
-+
-+#define RELEASE_REG_RESOURCE(fbdev, resource) \
-+    do { if( (fbdev)->reg_##resource != NULL ) { devm_release_resource((fbdev)->dev, fbdev->reg_##resource ); fbdev->reg_##resource = NULL; } } while(0)
-+
 +/**
 + * Release framebuffer hardware resources.
 + */
 +
 +static void vdma_fb_release(struct vdma_fb_device* fbdev) {
-+    int i;
-+
 +    if (fbdev == NULL) return;
 +
 +    /* Unregister framebuffer device */
@@ -337,22 +332,11 @@ diff -Naur linux-custom.orig/drivers/video/fbdev/vdmafb.c linux-custom/drivers/v
 +
 +    if (fbdev->reg_vdma != NULL) {
 +        /* Reset DMA channels */
-+        vdma_rx_write_reg(fbdev, VDMA_REG_CR, VDMA_CR_RESET_MASK);
 +        vdma_tx_write_reg(fbdev, VDMA_REG_CR, VDMA_CR_RESET_MASK);
 +    }
 +
-+    /* Release memory mapped IO resources */
++    /* MMIO and coherent framebuffer are device-managed. */
 +
-+    RELEASE_REG_RESOURCE(fbdev, vdma);
-+    
-+    /* Release framebuffer memories. */
-+
-+    for (i = 0; i < FB_NUMBER_OF_FRAMES; i++) {
-+        if (fbdev->frame[i].virt != NULL) {
-+            dma_free_coherent(fbdev->dev, GET_FB_SIZE(fbdev), fbdev->frame[i].virt, fbdev->frame[i].phys);
-+            fbdev->frame[i].virt = NULL;
-+        }
-+    }
 +}
 +
 +/* Release resources and exit from the function if the return code indicates an error. */
@@ -393,6 +377,11 @@ diff -Naur linux-custom.orig/drivers/video/fbdev/vdmafb.c linux-custom/drivers/v
 +        return rc;
 +    }
 +
++    if (fbdev->width != 800 || fbdev->height != 600)
++        return dev_err_probe(&pdev->dev, -EINVAL, "PL requires 800x600\n");
++    rc = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
++    if (rc)
++        return rc;
 +    fbsize = GET_FB_SIZE(fbdev);
 +
 +    /* Map registers to memory space. */
@@ -421,14 +410,14 @@ diff -Naur linux-custom.orig/drivers/video/fbdev/vdmafb.c linux-custom/drivers/v
 +    /* Allocate framebuffer */
 +    for (int i = 0; i < FB_NUMBER_OF_FRAMES; i++) {
 +        void* virt;
-+        virt = dma_alloc_coherent(fbdev->dev, fbsize, &fbdev->frame[i].phys, GFP_KERNEL);
++        virt = dmam_alloc_coherent(fbdev->dev, fbsize, &fbdev->frame[i].phys, GFP_KERNEL);
 +
 +        if (!virt) {
 +            dev_err(&pdev->dev, "Failed to allocate frame buffer\n");
 +            return -ENOMEM;
 +        }
 +
-+        memset_io((void __iomem *)virt, 0, fbsize);
++        memset(virt, 0, fbsize);
 +        fbdev->frame[i].virt = virt;
 +    }
 +    
@@ -459,8 +448,12 @@ diff -Naur linux-custom.orig/drivers/video/fbdev/vdmafb.c linux-custom/drivers/v
 +
 +    /* Reset the VDMA channels */
 +
-+    vdma_rx_write_reg(fbdev, VDMA_REG_CR, VDMA_CR_RESET_MASK);
 +    vdma_tx_write_reg(fbdev, VDMA_REG_CR, VDMA_CR_RESET_MASK);
++    rc = readl_poll_timeout(fbdev->reg_vdma + VDMA_REG_CR, cr,
++                           !(cr & VDMA_CR_RESET_MASK), 10, 100000);
++    if (rc)
++        return dev_err_probe(&pdev->dev, rc, "VDMA reset timed out\n");
++    cr = 0;
 +
 +    vdma_tx_write_reg(fbdev, VDMA_REG_CR, cr);
 +
@@ -495,7 +488,7 @@ diff -Naur linux-custom.orig/drivers/video/fbdev/vdmafb.c linux-custom/drivers/v
 +
 +    if (rc) {
 +        dev_err(&pdev->dev, "Could not register frame buffer\n");
-+        RELEASE_AND_RETURN(1);
++        RELEASE_AND_RETURN(rc);
 +    }
 +
 +    fbdev->flags |= VDMA_FB_FLAGS_REGISTERED;

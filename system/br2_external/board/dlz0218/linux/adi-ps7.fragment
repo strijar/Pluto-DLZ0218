@@ -20,3 +20,9 @@ CONFIG_TMPFS=y
 CONFIG_HIGHMEM=y
 # No CPU operating-point changes until board voltages are characterized.
 # CONFIG_CPU_FREQ is not set
+
+# Fixed 800x600 framebuffer, owned directly by vdmafb (not xilinx_dma).
+CONFIG_FB=y
+CONFIG_FB_VDMA=y
+CONFIG_FRAMEBUFFER_CONSOLE=y
+CONFIG_LOGO=y

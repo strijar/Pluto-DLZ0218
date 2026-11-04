@@ -1,0 +1,4 @@
+config BR2_PACKAGE_HDMI_TEST
+	bool "hdmi-test"
+	help
+	  Draw RGB color bars and a one-pixel border on the DLZ0218 framebuffer.

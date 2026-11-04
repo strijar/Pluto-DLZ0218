@@ -2,3 +2,14 @@
 
 #include "dlz0218-common.dtsi"
 #include "dlz0218-radio.dtsi"
+
+/* Fixed PL raster; vdmafb exclusively owns the MM2S register window. */
+
+&fpga_axi {
+    framebuffer@43000000 {
+        compatible = "r1cbu,vdmafb";
+        reg = <0x43000000 0x10000>;
+        width = <800>;
+        height = <600>;
+    };
+};
