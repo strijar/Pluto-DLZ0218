@@ -15,7 +15,9 @@ entity axi_video_to_rgb is
         s_axis_tlast : in std_logic;
         rgb : out std_logic_vector(23 downto 0);
         de, hsync, vsync : out std_logic;
-        fault : out std_logic);
+        fault : out std_logic;
+        pixel_x : out std_logic_vector(10 downto 0);
+        pixel_y : out std_logic_vector(9 downto 0));
 end entity;
 
 architecture rtl of axi_video_to_rgb is
@@ -43,9 +45,11 @@ begin
     if rising_edge(aclk) then
       if aresetn = '0' then
         running <= '0'; rgb <= (others => '0');
+        pixel_x <= (others => '0'); pixel_y <= (others => '0');
         de <= '0'; hsync <= '0'; vsync <= '0'; fault <= '0';
       else
         -- Register timing together with pixels, including the black fallback.
+        pixel_x <= std_logic_vector(x); pixel_y <= std_logic_vector(y);
         de <= active; hsync <= hs; vsync <= vs; rgb <= (others => '0');
         take := s_axis_tvalid = '1' and ready_i = '1';
 

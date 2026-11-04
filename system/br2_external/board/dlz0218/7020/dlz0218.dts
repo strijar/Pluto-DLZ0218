@@ -13,3 +13,52 @@
         height = <600>;
     };
 };
+
+/ {
+    /* Logical ADI divider reference: 128 * 48kHz. No external I2S MCLK pin;
+     * HDMI consumption is paced by the PL 40MHz / (2500/3) accumulator. */
+
+    hdmi_audio_ref: hdmi-audio-ref {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <6144000>;
+    };
+
+    hdmi_audio_codec: hdmi-audio-codec {
+        compatible = "linux,spdif-dit";
+        #sound-dai-cells = <0>;
+    };
+
+    hdmi_sound: sound {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "DLZ0218HDMI";
+        simple-audio-card,format = "i2s";
+        simple-audio-card,mclk-fs = <128>;
+        simple-audio-card,bitclock-master = <&hdmi_cpu_dai>;
+        simple-audio-card,frame-master = <&hdmi_cpu_dai>;
+
+        hdmi_cpu_dai: simple-audio-card,cpu {
+            sound-dai = <&hdmi_audio>;
+
+            /* simple-card adds an exact 48000 Hz hw constraint. */
+            system-clock-frequency = <6144000>;
+            system-clock-fixed;
+        };
+
+        simple-audio-card,codec {
+            sound-dai = <&hdmi_audio_codec>;
+        };
+    };
+};
+
+&fpga_axi {
+    hdmi_audio: audio@43c00000 {
+        compatible = "adi,axi-i2s-1.00.a";
+        reg = <0x43c00000 0x10000>;
+        #sound-dai-cells = <0>;
+        clocks = <&hdmi_audio_ref>, <&clkc 15>;
+        clock-names = "ref", "axi";
+        dmas = <&dmac_s 0>;
+        dma-names = "tx";
+    };
+};

@@ -42,28 +42,14 @@ ad_connect video_clocks/clk_out1 video_out/aclk
 ad_connect video_reset/peripheral_aresetn video_out/aresetn
 ad_connect video_fifo/M_AXIS video_out/s_axis
 
-create_bd_cell -type ip -vlnv digilentinc.com:ip:rgb2dvi:1.2 video_phy
-set_property -dict [list CONFIG.kGenerateSerialClk false CONFIG.kRstActiveHigh false] [get_bd_cells video_phy]
+create_bd_cell -type ip -vlnv dlz0218.local:video:rgb2hdmi:1.0 video_phy
+ad_connect video_clocks/clk_out1 video_phy/pixel_clk
+ad_connect video_clocks/clk_out2 video_phy/serial_clk
+ad_connect video_reset/peripheral_aresetn video_phy/resetn
 
-ad_connect video_clocks/clk_out1 video_phy/PixelClk
-ad_connect video_clocks/clk_out2 video_phy/SerialClk
-ad_connect video_reset/peripheral_aresetn video_phy/aRst_n
-
-# fbdev words: R[23:16], G[15:8], B[7:0]. Digilent expects R,B,G.
-
-foreach {name hi lo} {red 23 16 green 15 8 blue 7 0} {
- ad_ip_instance xlslice video_$name [list DIN_WIDTH 24 DIN_FROM $hi DIN_TO $lo DOUT_WIDTH 8]
- ad_connect video_out/rgb video_$name/Din
+foreach p {rgb de hsync vsync pixel_x pixel_y} {
+ connect_bd_net [get_bd_pins video_out/$p] [get_bd_pins video_phy/$p]
 }
-
-ad_ip_instance xlconcat video_rgb {NUM_PORTS 3 IN0_WIDTH 8 IN1_WIDTH 8 IN2_WIDTH 8}
-ad_connect video_green/Dout video_rgb/In0
-ad_connect video_blue/Dout video_rgb/In1
-ad_connect video_red/Dout video_rgb/In2
-ad_connect video_rgb/dout video_phy/vid_pData
-ad_connect video_out/de video_phy/vid_pVDE
-ad_connect video_out/hsync video_phy/vid_pHSync
-ad_connect video_out/vsync video_phy/vid_pVSync
 
 foreach p {TMDS_Clk_p TMDS_Clk_n} {
  create_bd_port -dir O $p
@@ -77,3 +63,19 @@ foreach p {TMDS_Data_p TMDS_Data_n} {
 
 create_bd_port -dir O HDMI_OUT_EN1
 ad_connect HDMI_OUT_EN1 VCC
+
+# Existing ADI ASoC ABI at 0x43c00000, PS PL330 peripheral request 0.
+
+set_property CONFIG.PCW_USE_DMA0 1 $ps7
+
+create_bd_cell -type ip -vlnv dlz0218.local:audio:axi_hdmi_audio:1.0 hdmi_audio
+
+ad_connect sys_cpu_clk hdmi_audio/s_axi_aclk
+ad_connect sys_cpu_resetn hdmi_audio/s_axi_aresetn
+ad_connect sys_cpu_clk sys_ps7/DMA0_ACLK
+ad_connect hdmi_audio/dma_req sys_ps7/DMA0_REQ
+ad_connect sys_ps7/DMA0_ACK hdmi_audio/dma_ack
+ad_connect video_clocks/clk_out1 hdmi_audio/pixel_clk
+ad_connect video_reset/peripheral_aresetn hdmi_audio/pixel_resetn
+ad_connect hdmi_audio/pcm video_phy/pcm
+ad_cpu_interconnect 0x43c00000 hdmi_audio

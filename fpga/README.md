@@ -147,8 +147,7 @@ Routed WNS +1,706 нс, WHS +0,050 нс, DRC 0 ошибок.
 ## Видеовыход 800×600
 
 `video_bd.tcl` добавляет видео к SDR-проекту:
-DDR → PS HP0 → AXI VDMA MM2S → AXIS FIFO → `axi_video_to_rgb` → Digilent
-RGB2DVI → HDMI-разъём. Адрес регистров VDMA — `0x43000000`, окно 64 КиБ.
+DDR → PS HP0 → AXI VDMA MM2S → AXIS FIFO → `axi_video_to_rgb` → `rgb2hdmi` (Digilent PHY) → HDMI-разъём. Адрес регистров VDMA — `0x43000000`, окно 64 КиБ.
 HP1/HP2 и адреса радиотракта сохранены. VDMA использует AXI memory 64 bit
 при 100 МГц и AXIS RGB888 при 40 МГц; пересечение доменов выполняет VDMA.
 FIFO глубиной 2048 пикселей работает в домене 40 МГц.
@@ -156,7 +155,8 @@ FIFO глубиной 2048 пикселей работает в домене 40 
 Режим фиксирован: 800×600, H=800/40/128/88, V=600/1/4/23,
 положительные HSYNC/VSYNC, 40 МГц pixel clock. Clock Wizard получает
 FCLK0=100 МГц и создаёт согласованные 40/200 МГц для OSERDES DDR 10:1.
-Вывод пока DVI video через HDMI, без InfoFrames и аудио.
+Добавлены HDMI Data Islands, InfoFrames и тестовый тон 1 кГц из PL;
+подробнее — [HDMI IP](ip/hdmi_tx/README.md).
 
 VHDL `video_timing_gen` входит в упакованный `axi_video_to_rgb`.
 `make -C fpga video-ip` создаёт `build/ip/video_out/component.xml` и
@@ -170,7 +170,7 @@ VHDL `video_timing_gen` входит в упакованный `axi_video_to_rgb
 остаток кадра чёрный, затем адаптер ищет следующий SOF. HSYNC/VSYNC/DE
 продолжают идти без остановки. Выход `fault` — sticky-индикатор для ILA,
 в текущем BD программно не читается. RGB и синхросигналы регистрируются
-вместе. На вход Digilent поступает R,B,G, как в проверенном примере;
+вместе с координатами растра. `rgb2hdmi` принимает обычное RGB[23:0];
 framebuffer в памяти содержит байты B,G,R.
 
 ```sh
@@ -178,8 +178,6 @@ make -C fpga test
 make -C fpga VIVADO=~/Xilinx/Vivado/2019.2/bin/vivado
 ```
 
-GHDL проверяет восемь полных кадров: тайминги, первый/последний пиксель,
-backpressure, underflow, ошибочные EOL/SOF, восстановление и reset в середине кадра.
 Физическое изображение проверяется отдельно после загрузки новой системы:
 
 ```sh
@@ -205,4 +203,33 @@ VDMA и 26 advisory. Предупреждения не подавлены. Ос�
 3,3 В также сохраняется.
 
 Buildroot: ядро 6.1.70-adi-dlz0218, DTB, U-Boot/SPL, hdmi-test и sdcard.img
-собраны. Новый образ на плату в рамках этой проверки не загружался.
+собраны. Пользователь подтвердил на плате загрузочную консоль и полосы
+`hdmi-test`; проверка HDMI-аудио относится к следующему этапу.
+
+### HDMI-аудио: ALSA / PL330
+
+Текущий BD использует `axi_hdmi_audio` по адресу `0x43c00000`, PS DMA0_REQ/
+DMA0_ACK и GP0. Радио DMA и HP-порты не изменены. Буфер на 256 стереопар
+передаёт PCM из домена 100 МГц в домен pixel clock 40 МГц. Частота чтения
+48 кГц; при остановке или пустом буфере передаётся тишина. В `rgb2hdmi`
+тестовый источник сохранён за generic `TEST_TONE`, по умолчанию false.
+
+```sh
+make -C fpga test-audio
+make -C fpga VIVADO=~/Xilinx/Vivado/2019.2/bin/vivado
+```
+
+Симуляция проверяет независимые AW/W, AXI backpressure, PL330 SINGLE/FLUSH,
+заполнение и оборот FIFO, порядок PCM16 L/R, тишину, сброс и повторный запуск.
+HDMI-пакетизатор не изменён относительно проверенного этапа с тоном.
+Подробности ABI и CDC — [COMPATIBILITY.md](ip/hdmi_audio/COMPATIBILITY.md);
+команды проверки на плате — [system/README.md](../system/README.md#hdmi-alsa).
+Новый тракт ALSA пока проверен сборкой и симуляцией, но не на плате.
+Локальная копия проверенного битстрима с автономным тоном:
+`build/export/system-hdmi-tone.bit`.
+
+Итоговая ALSA-сборка 2026-11-04: WNS +1,110 нс, WHS +0,016 нс;
+13656 LUT, 20933 FF, 9 BRAM, 28 DSP. DRC без ошибок, два прежних
+предупреждения VDMA. Ограничения Gray-переходов выполнены; замечания CDC
+для намеренного объединения асинхронных сбросов разобраны в COMPATIBILITY.md.
+Полный `system/output_system/images/sdcard.img` пересобран с этим битстримом.
