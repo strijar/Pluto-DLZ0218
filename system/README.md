@@ -97,7 +97,8 @@ bootm 0x02000000 - 0x01f00000
 UART физически UART1 (MIO48/49), но alias `serial0` даёт Linux имя `ttyPS0`.
 Ethernet — GEM0, RTL8211E по MDIO address 0, `rgmii-id`, как в проверенном
 U-Boot. Сброс PHY подключён к PS_PRO_B, фиктивного reset GPIO нет.
-USB и QSPI в Linux пока не включены; их настройку добавим отдельно.
+USB0 включён в фиксированном режиме host для USB-A.
+QSPI в Linux пока не включён.
 
 PS7 уже проверен на плате: Linux загружается, Ethernet работает, видна память 1 ГиБ.
 AD9363, digital tuning, локальный/сетевой RX и TX через DDS/DMA также проверены.

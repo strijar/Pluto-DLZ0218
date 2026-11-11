@@ -51,6 +51,13 @@
     };
 };
 
-/* USB and QSPI are left disabled.
- * Add their board-specific nodes when testing those peripherals.
+/* The fitted USB-A connector is a host port. Force the controller role:
+ * P6 (USB_ID selector) is unpopulated on the tested board revision.
+ * ULPI MIO28..39 and PHY reset MIO46 are initialized by PS7/SPL.
  */
+&usb0 {
+    status = "okay";
+    dr_mode = "host";
+};
+
+/* QSPI remains disabled until separately tested. */
